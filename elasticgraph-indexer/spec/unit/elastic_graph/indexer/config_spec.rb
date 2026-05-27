@@ -31,6 +31,32 @@ module ElasticGraph
 
         expect(config.skip_derived_indexing_type_updates).to eq("WidgetCurrency" => ["USD"].to_set)
       end
+
+      it "defaults `skip_record_validation_for` to an empty set" do
+        config = Config.from_parsed_yaml("indexer" => {
+          "latency_slo_thresholds_by_timestamp_in_ms" => {}
+        })
+
+        expect(config.skip_record_validation_for).to eq(::Set.new)
+      end
+
+      it "converts `skip_record_validation_for` from a YAML list of type names into a set" do
+        config = Config.from_parsed_yaml("indexer" => {
+          "latency_slo_thresholds_by_timestamp_in_ms" => {},
+          "skip_record_validation_for" => ["Widget", "Component"]
+        })
+
+        expect(config.skip_record_validation_for).to eq(::Set["Widget", "Component"])
+      end
+
+      it "rejects `skip_record_validation_for` entries that are not GraphQL-style type names" do
+        expect {
+          Config.from_parsed_yaml("indexer" => {
+            "latency_slo_thresholds_by_timestamp_in_ms" => {},
+            "skip_record_validation_for" => ["widget"]
+          })
+        }.to raise_error Errors::ConfigError, a_string_including("skip_record_validation_for")
+      end
     end
   end
 end

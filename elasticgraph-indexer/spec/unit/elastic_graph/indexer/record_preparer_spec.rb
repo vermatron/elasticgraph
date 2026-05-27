@@ -215,6 +215,32 @@ module ElasticGraph
           expect(record).to eq({"id" => "1", "size" => 3})
         end
 
+        it "raises `UnknownTypeError` (a `KeyError` subclass) when an abstract-type record has an unknown `__typename`" do
+          preparer, schema_artifacts = build_preparer_with_artifacts do |s|
+            s.object_type "TypeA" do |t|
+              t.field "id", "ID!"
+              t.field "name", "String"
+            end
+
+            s.object_type "TypeB" do |t|
+              t.field "id", "ID!"
+              t.field "size", "Int"
+            end
+
+            s.union_type "TypeAOrB" do |t|
+              t.subtype "TypeA"
+              t.subtype "TypeB"
+              t.index "type_a_or_b"
+            end
+          end
+
+          type_a_or_b_mapping_properties = schema_artifacts.index_mappings_by_index_def_name.fetch("type_a_or_b").fetch("properties")
+
+          expect {
+            preparer.prepare_for_index("TypeAOrB", {"id" => "1", "__typename" => "NotARealType"}, type_a_or_b_mapping_properties)
+          }.to raise_error(RecordPreparer::UnknownTypeError, a_string_including("NotARealType"))
+        end
+
         it "handles abstract types (like type unions) stored in a single index, properly including `__typename`" do
           preparer, schema_artifacts = build_preparer_with_artifacts do |s|
             s.object_type "TypeA" do |t|

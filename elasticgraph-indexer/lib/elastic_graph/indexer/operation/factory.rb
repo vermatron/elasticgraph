@@ -23,9 +23,12 @@ module ElasticGraph
         :record_preparer_factory,
         :logger,
         :skip_derived_indexing_type_updates,
+        :skip_record_validation_for,
         :configure_record_validator
       )
         def build(event)
+          log_skip_record_validation_once
+
           event = prepare_event(event)
 
           selected_json_schema_version = select_json_schema_version(event) { |failure| return failure }
@@ -41,10 +44,29 @@ module ElasticGraph
           end
 
           failed_result = validate_record_returning_failure(event, selected_json_schema_version)
-          failed_result || BuildResult.success(build_all_operations_for(
-            event,
-            record_preparer_factory.for_json_schema_version(selected_json_schema_version)
-          ))
+          return failed_result if failed_result
+
+          begin
+            BuildResult.success(build_all_operations_for(
+              event,
+              record_preparer_factory.for_json_schema_version(selected_json_schema_version)
+            ))
+          rescue RecordPreparer::UnknownTypeError
+            # Safety net for `skip_record_validation_for`: when record validation is skipped, an
+            # event with a missing or unknown abstract-type `__typename` reaches `RecordPreparer`
+            # and raises. Convert it to a `FailedEventError` so callers see a structured failure
+            # rather than an exception leaking out of `Factory#build`. The message intentionally
+            # omits the offending value to avoid leaking record data.
+            build_failed_result(event, "#{event["type"]} record", "Missing or unknown `__typename` for an abstract-type field.")
+          end
+        end
+
+        # Tracks which skip-set keys have already been logged, so the one-time log survives across
+        # `.with`-derived `Factory` instances. Class-level state is intentional here: the log
+        # represents an operational signal about the running process, not per-instance behavior.
+        # Exposed publicly so tests can reset it between examples.
+        def self.logged_skip_keys
+          @logged_skip_keys ||= ::Set.new # : ::Set[::Array[::String]]
         end
 
         private
@@ -120,11 +142,29 @@ module ElasticGraph
         def validate_record_returning_failure(event, selected_json_schema_version)
           record = event.fetch("record")
           graphql_type_name = event.fetch("type")
+          return nil if skip_record_validation_for.include?(graphql_type_name)
+
           validator = validator(graphql_type_name, selected_json_schema_version)
 
           if (error_message = validator.validate_with_error_message(record))
             build_failed_result(event, "#{graphql_type_name} record", error_message)
           end
+        end
+
+        # Emits a one-time INFO log on the first `build` call when record-level validation has been
+        # disabled for one or more types. We log it lazily (rather than at construction) so the message
+        # is only emitted by factories that actually process events. The log is keyed on the sorted
+        # skip set so that `.with`-derived factory instances (which share the same underlying skip
+        # configuration) do not produce duplicate log lines.
+        def log_skip_record_validation_once
+          return if skip_record_validation_for.empty?
+          key = skip_record_validation_for.to_a.sort
+          return unless self.class.logged_skip_keys.add?(key)
+
+          logger.info({
+            "message_type" => "ElasticGraphSkipRecordValidation",
+            "skipped_types" => key
+          })
         end
 
         def build_failed_result(event, payload_description, validation_message)

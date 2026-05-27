@@ -11,7 +11,7 @@ require "elastic_graph/errors"
 
 module ElasticGraph
   class Indexer
-    class Config < Support::Config.define(:latency_slo_thresholds_by_timestamp_in_ms, :skip_derived_indexing_type_updates)
+    class Config < Support::Config.define(:latency_slo_thresholds_by_timestamp_in_ms, :skip_derived_indexing_type_updates, :skip_record_validation_for)
       json_schema at: "indexer",
         optional: false,
         description: "Configuration for indexing operations and metrics used by `elasticgraph-indexer`.",
@@ -42,15 +42,37 @@ module ElasticGraph
               {}, # : untyped
               {"WidgetWorkspace" => ["ABC12345678"]}
             ]
+          },
+          # Sibling backfill knob to `skip_derived_indexing_type_updates`. Skips per-type record-level
+          # JSON schema validation; the event envelope is still validated. Intended for backfills of
+          # trusted, pre-validated data where the per-record schema walk is the dominant cost. Not safe
+          # for live ingest: datastore mappings do not enforce regex/enum/min/max/format/discriminator
+          # constraints that the JSON schema does.
+          skip_record_validation_for: {
+            description: "List of GraphQL type names whose record-level JSON schema validation should be skipped. " \
+              "The event envelope (op, id, type, version, json_schema_version, latency_timestamps) is still " \
+              "validated for these types. Intended for backfills of trusted, pre-validated data where skipping " \
+              "the per-record schema walk yields meaningful ingest speedups. Leave empty for live-traffic " \
+              "ingestion: the datastore mappings will not catch all the constraints (regex, enum, min/max, " \
+              "format, abstract-type discriminators) that the JSON schema enforces.",
+            type: "array",
+            items: {type: "string", pattern: /^[A-Z]\w*$/.source},
+            uniqueItems: true,
+            default: [], # : untyped
+            examples: [
+              [], # : untyped
+              ["Widget", "Component"]
+            ]
           }
         }
 
       private
 
-      def convert_values(skip_derived_indexing_type_updates:, latency_slo_thresholds_by_timestamp_in_ms:)
+      def convert_values(skip_derived_indexing_type_updates:, latency_slo_thresholds_by_timestamp_in_ms:, skip_record_validation_for:)
         {
           skip_derived_indexing_type_updates: skip_derived_indexing_type_updates.transform_values(&:to_set),
-          latency_slo_thresholds_by_timestamp_in_ms: latency_slo_thresholds_by_timestamp_in_ms
+          latency_slo_thresholds_by_timestamp_in_ms: latency_slo_thresholds_by_timestamp_in_ms,
+          skip_record_validation_for: skip_record_validation_for.to_set
         }
       end
     end

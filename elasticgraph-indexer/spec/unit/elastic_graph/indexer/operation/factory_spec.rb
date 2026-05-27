@@ -75,6 +75,104 @@ module ElasticGraph
             end
           end
 
+          # `Factory` tracks emitted skip-validation log lines via a class-level Set so the
+          # one-time log survives `.with`-derived instances. We reset it here so each example
+          # starts from a clean slate.
+          before { Factory.logged_skip_keys.clear }
+
+          # We deliberately construct the indexer here without going through `build_indexer`. The
+          # `skip_record_validation_for` knob is intentionally not exposed via spec helpers so that
+          # tests cannot silently weaken validation; enabling it must be a visible, deliberate choice
+          # in each spec that exercises it.
+          context "when the indexer is configured to skip record validation for some types" do
+            let(:indexer) do
+              datastore_core = build_datastore_core
+              Indexer.new(
+                datastore_core: datastore_core,
+                config: Indexer::Config.new(
+                  latency_slo_thresholds_by_timestamp_in_ms: {},
+                  skip_derived_indexing_type_updates: {},
+                  skip_record_validation_for: ["Component"]
+                )
+              )
+            end
+
+            it "skips per-type record validation for the listed type but still builds operations" do
+              event = build_upsert_event(:component, id: "1", __version: 1)
+              event["record"]["name"] = 123 # would normally fail JSON schema validation
+
+              expect(build_expecting_success(event)).to eq([new_primary_indexing_operation({
+                "op" => "upsert",
+                "id" => "1",
+                "type" => "Component",
+                "version" => 1,
+                "record" => event["record"],
+                JSON_SCHEMA_VERSION_KEY => 1
+              })])
+            end
+
+            it "still validates record-level fields for types that are not in the skip list" do
+              widget_event = build_upsert_event(:widget, id: "1", __version: 1)
+              widget_event["record"]["name"] = 123
+
+              expect_failed_event_error(widget_event, "Malformed Widget record", "name")
+            end
+
+            it "still applies envelope-level validation for skipped types" do
+              event = build_upsert_event(:component, id: "1", __version: -1)
+
+              expect_failed_event_error(event, "/properties/version")
+            end
+
+            it "logs a one-time INFO message listing the skipped types on the first build call" do
+              event1 = build_upsert_event(:component, id: "1", __version: 1)
+              event2 = build_upsert_event(:component, id: "2", __version: 1)
+
+              build_expecting_success(event1)
+              build_expecting_success(event2)
+
+              logs = logged_jsons_of_type("ElasticGraphSkipRecordValidation")
+              expect(logs.size).to eq(1)
+              expect(logs.first).to include("skipped_types" => ["Component"])
+            end
+          end
+
+          context "when skip_record_validation_for is empty" do
+            it "does not emit the ElasticGraphSkipRecordValidation log" do
+              event = build_upsert_event(:component, id: "1", __version: 1)
+
+              build_expecting_success(event)
+
+              expect(logged_jsons_of_type("ElasticGraphSkipRecordValidation")).to be_empty
+            end
+          end
+
+          context "when validation is skipped and an abstract-type field carries an unknown `__typename`" do
+            # Widget has an `inventor` field whose type is the `Inventor` union. With validation
+            # skipped, `RecordPreparer` would normally raise on an unknown concrete subtype; the
+            # safety net in `Factory#build` converts that into a structured `FailedEventError`.
+            let(:indexer) do
+              datastore_core = build_datastore_core
+              Indexer.new(
+                datastore_core: datastore_core,
+                config: Indexer::Config.new(
+                  latency_slo_thresholds_by_timestamp_in_ms: {},
+                  skip_derived_indexing_type_updates: {},
+                  skip_record_validation_for: ["Widget"]
+                )
+              )
+            end
+
+            it "produces a FailedEventError instead of raising" do
+              event = build_upsert_event(:widget, id: "1", __version: 1)
+              event["record"]["inventor"] = {"__typename" => "NotARealConcreteType", "name" => "anon"}
+
+              expect {
+                expect_failed_event_error(event, "Widget record", "__typename")
+              }.not_to raise_error
+            end
+          end
+
           it "generates a primary indexing operation for a single index with latency metrics" do
             event = build_upsert_event(:component, id: "1", __version: 1)
             latency_timestamps = {"latency_timestamps" => {"created_in_esperanto_at" => "2012-04-23T18:25:43.511Z"}}
