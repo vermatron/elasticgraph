@@ -43,11 +43,6 @@ module ElasticGraph
               {"WidgetWorkspace" => ["ABC12345678"]}
             ]
           },
-          # Sibling backfill knob to `skip_derived_indexing_type_updates`. Skips per-type record-level
-          # JSON schema validation; the event envelope is still validated. Intended for backfills of
-          # trusted, pre-validated data where the per-record schema walk is the dominant cost. Not safe
-          # for live ingest: datastore mappings do not enforce regex/enum/min/max/format/discriminator
-          # constraints that the JSON schema does.
           skip_record_validation_for: {
             description: "List of GraphQL type names whose record-level JSON schema validation should be skipped. " \
               "The event envelope (op, id, type, version, json_schema_version, latency_timestamps) is still " \

@@ -37,8 +37,6 @@ module ElasticGraph
 
       class Factory < FactorySupertype
         def build: (event) -> BuildResult
-        def self.logged_skip_keys: () -> ::Set[::Array[::String]]
-        self.@logged_skip_keys: ::Set[::Array[::String]]?
 
         private
 
@@ -50,8 +48,6 @@ module ElasticGraph
         def select_json_schema_version: (event) { (BuildResult) -> bot } -> (::Integer | bot)
         def prepare_event: (event) -> event
         def validate_record_returning_failure: (event, ::Integer) -> BuildResult?
-
-        def log_skip_record_validation_once: () -> void
 
         def build_failed_result: (event, ::String, ::String) -> BuildResult
         def build_all_operations_for: (event, _RecordPreparer) -> ::Array[_Operation]

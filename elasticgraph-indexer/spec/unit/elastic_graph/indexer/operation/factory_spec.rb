@@ -75,11 +75,6 @@ module ElasticGraph
             end
           end
 
-          # `Factory` tracks emitted skip-validation log lines via a class-level Set so the
-          # one-time log survives `.with`-derived instances. We reset it here so each example
-          # starts from a clean slate.
-          before { Factory.logged_skip_keys.clear }
-
           # We deliberately construct the indexer here without going through `build_indexer`. The
           # `skip_record_validation_for` knob is intentionally not exposed via spec helpers so that
           # tests cannot silently weaken validation; enabling it must be a visible, deliberate choice
@@ -123,27 +118,39 @@ module ElasticGraph
 
               expect_failed_event_error(event, "/properties/version")
             end
-
-            it "logs a one-time INFO message listing the skipped types on the first build call" do
-              event1 = build_upsert_event(:component, id: "1", __version: 1)
-              event2 = build_upsert_event(:component, id: "2", __version: 1)
-
-              build_expecting_success(event1)
-              build_expecting_success(event2)
-
-              logs = logged_jsons_of_type("ElasticGraphSkipRecordValidation")
-              expect(logs.size).to eq(1)
-              expect(logs.first).to include("skipped_types" => ["Component"])
-            end
           end
 
-          context "when skip_record_validation_for is empty" do
-            it "does not emit the ElasticGraphSkipRecordValidation log" do
-              event = build_upsert_event(:component, id: "1", __version: 1)
+          context "when record validation is skipped for a type that has derived-index update targets" do
+            # Widget has a `WidgetCurrency` derived index update target. With validation skipped,
+            # `build_all_operations_for` still has to traverse `Update.operations_for` and the
+            # schema artifacts. This spec locks in that skipping does not regress the derived path.
+            let(:indexer) do
+              datastore_core = build_datastore_core
+              Indexer.new(
+                datastore_core: datastore_core,
+                config: Indexer::Config.new(
+                  latency_slo_thresholds_by_timestamp_in_ms: {},
+                  skip_derived_indexing_type_updates: {},
+                  skip_record_validation_for: ["Widget"]
+                )
+              )
+            end
 
-              build_expecting_success(event)
+            it "still emits both the primary and the derived-index update operations" do
+              event = build_upsert_event(:widget, id: "1", __version: 1)
+              formatted_event = {
+                "op" => "upsert",
+                "id" => "1",
+                "type" => "Widget",
+                "version" => 1,
+                "record" => event["record"],
+                JSON_SCHEMA_VERSION_KEY => 1
+              }
 
-              expect(logged_jsons_of_type("ElasticGraphSkipRecordValidation")).to be_empty
+              expect(build_expecting_success(event)).to contain_exactly(
+                new_primary_indexing_operation(formatted_event, index_def: index_def_named("widgets")),
+                widget_currency_derived_update_operation_for(formatted_event)
+              )
             end
           end
 
