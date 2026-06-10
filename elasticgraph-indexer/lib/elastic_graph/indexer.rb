@@ -66,6 +66,7 @@ module ElasticGraph
           datastore_router: datastore_router,
           operation_factory: operation_factory,
           indexing_latency_slo_thresholds_by_timestamp_in_ms: config.latency_slo_thresholds_by_timestamp_in_ms,
+          skip_malformed_event_supersession_check: config.skip_malformed_event_supersession_check,
           clock: @clock,
           logger: datastore_core.logger
         )

@@ -386,6 +386,45 @@ module ElasticGraph
           end
         end
 
+        context "when `skip_malformed_event_supersession_check` is true" do
+          let(:good_component) { build_upsert_event(:component, id: "123", __version: 1) }
+          let(:good_address) { build_upsert_event(:address, id: "456", __version: 1) }
+          let(:bad_component) { make_component_bad(good_component).merge("id" => "234") }
+          let(:bad_color) { good_address.merge("type" => "Color", "id" => "345") } # Color is not a valid `type`
+
+          let(:indexer) do
+            build_indexer(
+              clock: clock,
+              datastore_router: datastore_router,
+              latency_slo_thresholds_by_timestamp_in_ms: {},
+              skip_malformed_event_supersession_check: true
+            )
+          end
+
+          it "skips the version-supersession msearch and surfaces every malformed event as an outstanding failure" do
+            expect {
+              process([good_component, bad_component, good_address, bad_color])
+            }.to raise_error IndexingFailuresError, a_string_including(
+              "2 failure(s) from 4 event(s)",
+              "Component:234@v1",
+              "Color:345@v1"
+            )
+
+            expect(datastore_router).not_to have_received(:source_event_versions_in_index)
+          end
+
+          it "surfaces failures via `process_returning_failures` without consulting the datastore for prior versions" do
+            failures = process_returning_failures([good_component, bad_component, good_address, bad_color])
+
+            expect(failures.map(&:id)).to contain_exactly("234", "345")
+            expect(datastore_router).not_to have_received(:source_event_versions_in_index)
+          end
+
+          def make_component_bad(component)
+            component.merge("record" => component["record"].merge("name" => 17))
+          end
+        end
+
         def build_indexer_with(latency_thresholds:)
           build_indexer(
             clock: clock,

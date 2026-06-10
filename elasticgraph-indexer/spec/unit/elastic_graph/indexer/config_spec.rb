@@ -31,6 +31,34 @@ module ElasticGraph
 
         expect(config.skip_derived_indexing_type_updates).to eq("WidgetCurrency" => ["USD"].to_set)
       end
+
+      describe "skip_malformed_event_supersession_check" do
+        it "defaults to false" do
+          config = Config.from_parsed_yaml("indexer" => {
+            "latency_slo_thresholds_by_timestamp_in_ms" => {}
+          })
+
+          expect(config.skip_malformed_event_supersession_check).to be(false)
+        end
+
+        it "accepts true" do
+          config = Config.from_parsed_yaml("indexer" => {
+            "latency_slo_thresholds_by_timestamp_in_ms" => {},
+            "skip_malformed_event_supersession_check" => true
+          })
+
+          expect(config.skip_malformed_event_supersession_check).to be(true)
+        end
+
+        it "rejects non-boolean values" do
+          expect {
+            Config.from_parsed_yaml("indexer" => {
+              "latency_slo_thresholds_by_timestamp_in_ms" => {},
+              "skip_malformed_event_supersession_check" => "yes"
+            })
+          }.to raise_error Errors::ConfigError, a_string_including("skip_malformed_event_supersession_check")
+        end
+      end
     end
   end
 end

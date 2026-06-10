@@ -11,7 +11,7 @@ require "elastic_graph/errors"
 
 module ElasticGraph
   class Indexer
-    class Config < Support::Config.define(:latency_slo_thresholds_by_timestamp_in_ms, :skip_derived_indexing_type_updates)
+    class Config < Support::Config.define(:latency_slo_thresholds_by_timestamp_in_ms, :skip_derived_indexing_type_updates, :skip_malformed_event_supersession_check)
       json_schema at: "indexer",
         optional: false,
         description: "Configuration for indexing operations and metrics used by `elasticgraph-indexer`.",
@@ -42,15 +42,29 @@ module ElasticGraph
               {}, # : untyped
               {"WidgetWorkspace" => ["ABC12345678"]}
             ]
+          },
+          skip_malformed_event_supersession_check: {
+            description: "Recovery-time lever to disable the version-supersession msearch that runs after validation " \
+              "failures. By default, when an event fails validation, ElasticGraph queries the datastore (via " \
+              "msearch, with no shard routing) to check if a later corrected event has already superseded the " \
+              "malformed one, and silently drops superseded failures. During a sustained validation-failure " \
+              "storm, that fan-out msearch can amplify load on an already-unhealthy cluster. Setting this to " \
+              "`true` skips the msearch entirely and surfaces every malformed event as an outstanding failure " \
+              "(including ones that have already been corrected upstream). Leave at the default unless an " \
+              "active incident calls for it.",
+            type: "boolean",
+            default: false,
+            examples: [false, true]
           }
         }
 
       private
 
-      def convert_values(skip_derived_indexing_type_updates:, latency_slo_thresholds_by_timestamp_in_ms:)
+      def convert_values(skip_derived_indexing_type_updates:, latency_slo_thresholds_by_timestamp_in_ms:, skip_malformed_event_supersession_check:)
         {
           skip_derived_indexing_type_updates: skip_derived_indexing_type_updates.transform_values(&:to_set),
-          latency_slo_thresholds_by_timestamp_in_ms: latency_slo_thresholds_by_timestamp_in_ms
+          latency_slo_thresholds_by_timestamp_in_ms: latency_slo_thresholds_by_timestamp_in_ms,
+          skip_malformed_event_supersession_check: skip_malformed_event_supersession_check
         }
       end
     end

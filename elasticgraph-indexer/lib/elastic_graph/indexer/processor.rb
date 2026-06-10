@@ -19,6 +19,7 @@ module ElasticGraph
         operation_factory:,
         logger:,
         indexing_latency_slo_thresholds_by_timestamp_in_ms:,
+        skip_malformed_event_supersession_check: false,
         clock: ::Time
       )
         @datastore_router = datastore_router
@@ -26,6 +27,7 @@ module ElasticGraph
         @clock = clock
         @logger = logger
         @indexing_latency_slo_thresholds_by_timestamp_in_ms = indexing_latency_slo_thresholds_by_timestamp_in_ms
+        @skip_supersession_check = skip_malformed_event_supersession_check
       end
 
       # Processes the given events, writing them to the datastore. If any events are invalid, an
@@ -63,6 +65,8 @@ module ElasticGraph
       private
 
       def categorize_failures(failures, events)
+        return failures if @skip_supersession_check
+
         source_event_versions_by_cluster_by_op = @datastore_router.source_event_versions_in_index(
           failures.flat_map { |f| f.versioned_operations.to_a }
         )

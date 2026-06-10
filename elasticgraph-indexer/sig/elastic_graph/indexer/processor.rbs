@@ -6,6 +6,7 @@ module ElasticGraph
         operation_factory: Operation::Factory,
         logger: ::Logger,
         indexing_latency_slo_thresholds_by_timestamp_in_ms: ::Hash[::String, ::Integer],
+        ?skip_malformed_event_supersession_check: bool,
         ?clock: singleton(::Time)
       ) -> void
 
@@ -18,6 +19,7 @@ module ElasticGraph
       @operation_factory: Operation::Factory
       @logger: ::Logger
       @indexing_latency_slo_thresholds_by_timestamp_in_ms: ::Hash[::String, ::Integer]
+      @skip_supersession_check: bool
       @clock: singleton(::Time)
 
       def categorize_failures: (::Array[FailedEventError], ::Array[event]) -> ::Array[FailedEventError]

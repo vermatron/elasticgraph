@@ -5,14 +5,17 @@ module ElasticGraph
 
       attr_reader latency_slo_thresholds_by_timestamp_in_ms: ::Hash[::String, ::Integer]
       attr_reader skip_derived_indexing_type_updates: ::Hash[::String, ::Set[::String]]
+      attr_reader skip_malformed_event_supersession_check: bool
 
       def initialize: (
         ?latency_slo_thresholds_by_timestamp_in_ms: ::Hash[::String, ::Integer],
-        ?skip_derived_indexing_type_updates: ::Hash[::String, ::Set[::String]]) -> void
+        ?skip_derived_indexing_type_updates: ::Hash[::String, ::Set[::String]],
+        ?skip_malformed_event_supersession_check: bool) -> void
 
       def with: (
         ?latency_slo_thresholds_by_timestamp_in_ms: ::Hash[::String, ::Integer],
-        ?skip_derived_indexing_type_updates: ::Hash[::String, ::Set[::String]]) -> Config
+        ?skip_derived_indexing_type_updates: ::Hash[::String, ::Set[::String]],
+        ?skip_malformed_event_supersession_check: bool) -> Config
 
       def self.members: () -> ::Array[::Symbol]
     end
@@ -22,7 +25,8 @@ module ElasticGraph
 
       def convert_values: (
         latency_slo_thresholds_by_timestamp_in_ms: untyped,
-        skip_derived_indexing_type_updates: untyped
+        skip_derived_indexing_type_updates: untyped,
+        skip_malformed_event_supersession_check: untyped
       ) -> ::Hash[::Symbol, untyped]
     end
   end
