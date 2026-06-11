@@ -87,7 +87,7 @@ module ElasticGraph
                 config: Indexer::Config.new(
                   latency_slo_thresholds_by_timestamp_in_ms: {},
                   skip_derived_indexing_type_updates: {},
-                  skip_record_validation_for: ["Component"]
+                  skip_record_validation_for: {"Component" => 1.0}
                 )
               )
             end
@@ -120,6 +120,56 @@ module ElasticGraph
             end
           end
 
+          context "when the indexer configures a fractional skip rate for a type" do
+            let(:indexer) do
+              datastore_core = build_datastore_core
+              Indexer.new(
+                datastore_core: datastore_core,
+                config: Indexer::Config.new(
+                  latency_slo_thresholds_by_timestamp_in_ms: {},
+                  skip_derived_indexing_type_updates: {},
+                  skip_record_validation_for: {"Component" => 0.5}
+                )
+              )
+            end
+
+            it "skips validation when the event's stable bucket falls below the rate" do
+              # Stub crc32 so the bucket is 0.0 — well below 0.5 — forcing the "skip" branch.
+              allow(::Zlib).to receive(:crc32).and_return(0)
+
+              event = build_upsert_event(:component, id: "1", __version: 1)
+              event["record"]["name"] = 123 # would normally fail JSON schema validation
+
+              expect {
+                build_expecting_success(event)
+              }.not_to raise_error
+            end
+
+            it "still validates when the event's stable bucket falls at or above the rate" do
+              # Stub crc32 to a value just above 0.5 * 2**32 so the bucket >= rate, forcing validation.
+              allow(::Zlib).to receive(:crc32).and_return((2**32 * 0.75).to_i)
+
+              event = build_upsert_event(:component, id: "1", __version: 1)
+              event["record"]["name"] = 123
+
+              expect_failed_event_error(event, "Malformed Component record", "name")
+            end
+
+            it "produces the same skip decision for the same event on retry" do
+              # No stubbing — this exercises the real crc32 and locks in determinism without
+              # coupling to a specific hash output. Two builds of the same event must agree on
+              # whether to skip validation.
+              event = build_upsert_event(:component, id: "1", __version: 1)
+              event["record"]["name"] = 123 # would fail validation if not skipped
+
+              first = indexer.operation_factory.build(event)
+              second = indexer.operation_factory.build(event)
+
+              expect(first.failed_event_error.nil?).to eq(second.failed_event_error.nil?)
+              expect(first.operations.size).to eq(second.operations.size)
+            end
+          end
+
           context "when record validation is skipped for a type that has derived-index update targets" do
             # Widget has a `WidgetCurrency` derived index update target. With validation skipped,
             # `build_all_operations_for` still has to traverse `Update.operations_for` and the
@@ -131,7 +181,7 @@ module ElasticGraph
                 config: Indexer::Config.new(
                   latency_slo_thresholds_by_timestamp_in_ms: {},
                   skip_derived_indexing_type_updates: {},
-                  skip_record_validation_for: ["Widget"]
+                  skip_record_validation_for: {"Widget" => 1.0}
                 )
               )
             end
@@ -165,7 +215,7 @@ module ElasticGraph
                 config: Indexer::Config.new(
                   latency_slo_thresholds_by_timestamp_in_ms: {},
                   skip_derived_indexing_type_updates: {},
-                  skip_record_validation_for: ["Widget"]
+                  skip_record_validation_for: {"Widget" => 1.0}
                 )
               )
             end

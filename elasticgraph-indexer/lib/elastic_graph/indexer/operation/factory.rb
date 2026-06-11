@@ -13,6 +13,7 @@ require "elastic_graph/indexer/operation/update"
 require "elastic_graph/indexer/record_preparer"
 require "elastic_graph/support/json_schema/validator_factory"
 require "elastic_graph/support/memoizable_data"
+require "zlib"
 
 module ElasticGraph
   class Indexer
@@ -132,13 +133,25 @@ module ElasticGraph
         def validate_record_returning_failure(event, selected_json_schema_version)
           record = event.fetch("record")
           graphql_type_name = event.fetch("type")
-          return nil if skip_record_validation_for.include?(graphql_type_name)
+          return nil if skip_validation?(graphql_type_name, event)
 
           validator = validator(graphql_type_name, selected_json_schema_version)
 
           if (error_message = validator.validate_with_error_message(record))
             build_failed_result(event, "#{graphql_type_name} record", error_message)
           end
+        end
+
+        # Decides whether to skip per-record validation for `event` of `type`. The decision is
+        # deterministic per event id: a stable `Zlib.crc32` of `EventID#to_s` puts each event in a
+        # bucket in `[0.0, 1.0)` that is compared against the configured skip rate. Same event id =>
+        # same decision across pods and retries, so retries do not flip records between
+        # validated/skipped. `String#hash` is unsuitable here: `RUBY_HASH_SEED` is per-process.
+        def skip_validation?(type, event)
+          rate = skip_record_validation_for[type]
+          return false if rate.nil? || rate <= 0.0
+          return true if rate >= 1.0
+          ::Zlib.crc32(EventID.from_event(event).to_s).fdiv(2**32) < rate
         end
 
         def build_failed_result(event, payload_description, validation_message)

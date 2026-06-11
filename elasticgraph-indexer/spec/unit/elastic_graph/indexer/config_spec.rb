@@ -32,28 +32,63 @@ module ElasticGraph
         expect(config.skip_derived_indexing_type_updates).to eq("WidgetCurrency" => ["USD"].to_set)
       end
 
-      it "defaults `skip_record_validation_for` to an empty set" do
+      it "defaults `skip_record_validation_for` to an empty hash" do
         config = Config.from_parsed_yaml("indexer" => {
           "latency_slo_thresholds_by_timestamp_in_ms" => {}
         })
 
-        expect(config.skip_record_validation_for).to eq(::Set.new)
+        expect(config.skip_record_validation_for).to eq({})
       end
 
-      it "converts `skip_record_validation_for` from a YAML list of type names into a set" do
+      it "accepts `skip_record_validation_for` as a map of GraphQL type names to skip rates" do
         config = Config.from_parsed_yaml("indexer" => {
           "latency_slo_thresholds_by_timestamp_in_ms" => {},
-          "skip_record_validation_for" => ["Widget", "Component"]
+          "skip_record_validation_for" => {"Widget" => 0.9, "Component" => 1.0}
         })
 
-        expect(config.skip_record_validation_for).to eq(::Set["Widget", "Component"])
+        expect(config.skip_record_validation_for).to eq("Widget" => 0.9, "Component" => 1.0)
       end
 
-      it "rejects `skip_record_validation_for` entries that are not GraphQL-style type names" do
+      it "coerces integer rates (e.g. `1`) to `Float` so consumers see a uniform numeric type" do
+        config = Config.from_parsed_yaml("indexer" => {
+          "latency_slo_thresholds_by_timestamp_in_ms" => {},
+          "skip_record_validation_for" => {"Widget" => 1, "Component" => 0}
+        })
+
+        expect(config.skip_record_validation_for).to eq("Widget" => 1.0, "Component" => 0.0)
+        expect(config.skip_record_validation_for.values).to all be_a(::Float)
+      end
+
+      it "rejects `skip_record_validation_for` keys that are not GraphQL-style type names" do
         expect {
           Config.from_parsed_yaml("indexer" => {
             "latency_slo_thresholds_by_timestamp_in_ms" => {},
-            "skip_record_validation_for" => ["widget"]
+            "skip_record_validation_for" => {"widget" => 1.0}
+          })
+        }.to raise_error Errors::ConfigError, a_string_including("skip_record_validation_for")
+      end
+
+      it "rejects `skip_record_validation_for` rates outside the `[0.0, 1.0]` range" do
+        expect {
+          Config.from_parsed_yaml("indexer" => {
+            "latency_slo_thresholds_by_timestamp_in_ms" => {},
+            "skip_record_validation_for" => {"Widget" => 1.5}
+          })
+        }.to raise_error Errors::ConfigError, a_string_including("skip_record_validation_for")
+
+        expect {
+          Config.from_parsed_yaml("indexer" => {
+            "latency_slo_thresholds_by_timestamp_in_ms" => {},
+            "skip_record_validation_for" => {"Widget" => -0.1}
+          })
+        }.to raise_error Errors::ConfigError, a_string_including("skip_record_validation_for")
+      end
+
+      it "rejects `skip_record_validation_for` values that are not numeric" do
+        expect {
+          Config.from_parsed_yaml("indexer" => {
+            "latency_slo_thresholds_by_timestamp_in_ms" => {},
+            "skip_record_validation_for" => {"Widget" => "high"}
           })
         }.to raise_error Errors::ConfigError, a_string_including("skip_record_validation_for")
       end

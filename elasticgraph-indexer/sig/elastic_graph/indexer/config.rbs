@@ -5,17 +5,17 @@ module ElasticGraph
 
       attr_reader latency_slo_thresholds_by_timestamp_in_ms: ::Hash[::String, ::Integer]
       attr_reader skip_derived_indexing_type_updates: ::Hash[::String, ::Set[::String]]
-      attr_reader skip_record_validation_for: ::Set[::String]
+      attr_reader skip_record_validation_for: ::Hash[::String, ::Float]
 
       def initialize: (
         ?latency_slo_thresholds_by_timestamp_in_ms: ::Hash[::String, ::Integer],
         ?skip_derived_indexing_type_updates: ::Hash[::String, ::Set[::String]],
-        ?skip_record_validation_for: ::Set[::String]) -> void
+        ?skip_record_validation_for: ::Hash[::String, ::Float]) -> void
 
       def with: (
         ?latency_slo_thresholds_by_timestamp_in_ms: ::Hash[::String, ::Integer],
         ?skip_derived_indexing_type_updates: ::Hash[::String, ::Set[::String]],
-        ?skip_record_validation_for: ::Set[::String]) -> Config
+        ?skip_record_validation_for: ::Hash[::String, ::Float]) -> Config
 
       def self.members: () -> ::Array[::Symbol]
     end
