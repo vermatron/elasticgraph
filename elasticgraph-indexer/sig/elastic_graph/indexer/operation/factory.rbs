@@ -11,6 +11,7 @@ module ElasticGraph
         attr_reader record_preparer_factory: RecordPreparer::Factory
         attr_reader logger: ::Logger
         attr_reader skip_derived_indexing_type_updates: ::Hash[::String, ::Set[::String]]
+        attr_reader skip_record_validation_for: ::Hash[::String, ::Float]
         attr_reader configure_record_validator: (^(validatorFactory) -> validatorFactory)?
 
         def initialize: (
@@ -19,6 +20,7 @@ module ElasticGraph
           record_preparer_factory: RecordPreparer::Factory,
           logger: ::Logger,
           skip_derived_indexing_type_updates: ::Hash[::String, ::Set[::String]],
+          skip_record_validation_for: ::Hash[::String, ::Float],
           configure_record_validator: (^(validatorFactory) -> validatorFactory)?
         ) -> void
 
@@ -28,6 +30,7 @@ module ElasticGraph
           ?record_preparer_factory: RecordPreparer::Factory,
           ?logger: ::Logger,
           ?skip_derived_indexing_type_updates: ::Hash[::String, ::Set[::String]],
+          ?skip_record_validation_for: ::Hash[::String, ::Float],
           ?configure_record_validator: (^(validatorFactory) -> validatorFactory)?
         ) -> instance
       end
@@ -45,6 +48,8 @@ module ElasticGraph
         def select_json_schema_version: (event) { (BuildResult) -> bot } -> (::Integer | bot)
         def prepare_event: (event) -> event
         def validate_record_returning_failure: (event, ::Integer) -> BuildResult?
+        def skip_validation?: (::String, event) -> bool
+
         def build_failed_result: (event, ::String, ::String) -> BuildResult
         def build_all_operations_for: (event, _RecordPreparer) -> ::Array[_Operation]
         def index_definitions_for: (::String) -> ::Array[DatastoreCore::_IndexDefinition]
