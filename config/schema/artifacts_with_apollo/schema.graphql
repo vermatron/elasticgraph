@@ -1591,6 +1591,11 @@ type ComponentGroupedBy {
   name: String
 
   """
+  The `owner` field value for this group.
+  """
+  owner: ComponentOwner
+
+  """
   The `position` field value for this group.
   """
   position: PositionGroupedBy
@@ -7479,6 +7484,11 @@ type NamedEntityGroupedBy {
   options: WidgetOptionsGroupedBy
 
   """
+  The `owner` field value for this group.
+  """
+  owner: ComponentOwner
+
+  """
   The `position` field value for this group.
   """
   position: PositionGroupedBy
@@ -12936,6 +12946,10 @@ type SponsorHighlights {
   name: [String!]!
 }
 
+type SponsorRef @key(fields: "id", resolvable: false) {
+  id: ID
+}
+
 """
 Enumerates the ways `Sponsor`s can be sorted.
 """
@@ -12963,6 +12977,7 @@ enum SponsorSortOrderInput {
 
 type Sponsorship {
   annual_total: Money!
+  sponsor: SponsorRef
   sponsor_id: ID!
 }
 
@@ -13098,6 +13113,11 @@ type SponsorshipGroupedBy {
   The `annual_total` field value for this group.
   """
   annual_total: MoneyGroupedBy
+
+  """
+  The `sponsor` field value for this group.
+  """
+  sponsor: SponsorRef
 
   """
   The `sponsor_id` field value for this group.

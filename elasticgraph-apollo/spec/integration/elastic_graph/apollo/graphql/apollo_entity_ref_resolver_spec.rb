@@ -8,6 +8,8 @@
 
 require "elastic_graph/apollo/graphql/apollo_entity_ref_resolver"
 require "elastic_graph/graphql"
+require "elastic_graph/graphql/aggregation/composite_grouping_adapter"
+require "elastic_graph/graphql/aggregation/non_composite_grouping_adapter"
 
 module ElasticGraph
   module Apollo
@@ -96,6 +98,112 @@ module ElasticGraph
               "total_edge_count" => 0
             }
           })
+        end
+
+        it "groups by a groupable entity ref field, returning an entity ref (or `nil` for a missing id) per bucket" do
+          index_records(
+            build(:component, id: "c1", owner_id: "oid_1"),
+            build(:component, id: "c2", owner_id: "oid_1"),
+            build(:component, id: "c3", owner_id: "oid_2"),
+            build(:component, id: "c4", owner_id: nil)
+          )
+
+          data = execute_expecting_no_errors(<<~QUERY).dig("component_aggregations", "nodes")
+            query {
+              component_aggregations {
+                nodes {
+                  grouped_by {
+                    owner { __typename token }
+                    aliased_owner: owner { token }
+                  }
+                  count
+                }
+              }
+            }
+          QUERY
+
+          expect(data).to contain_exactly(
+            {"grouped_by" => {"owner" => {"__typename" => "ComponentOwner", "token" => "oid_1"}, "aliased_owner" => {"token" => "oid_1"}}, "count" => 2},
+            {"grouped_by" => {"owner" => {"__typename" => "ComponentOwner", "token" => "oid_2"}, "aliased_owner" => {"token" => "oid_2"}}, "count" => 1},
+            {"grouped_by" => {"owner" => nil, "aliased_owner" => nil}, "count" => 1}
+          )
+        end
+
+        it "groups by a groupable entity ref field when only `__typename` is requested from it" do
+          index_records(
+            build(:component, id: "c1", owner_id: "oid_1"),
+            build(:component, id: "c2", owner_id: "oid_2")
+          )
+
+          data = execute_expecting_no_errors(<<~QUERY).dig("component_aggregations", "nodes")
+            query {
+              component_aggregations {
+                nodes {
+                  grouped_by { owner { __typename } }
+                  count
+                }
+              }
+            }
+          QUERY
+
+          expect(data).to contain_exactly(
+            {"grouped_by" => {"owner" => {"__typename" => "ComponentOwner"}}, "count" => 1},
+            {"grouped_by" => {"owner" => {"__typename" => "ComponentOwner"}}, "count" => 1}
+          )
+        end
+
+        [::ElasticGraph::GraphQL::Aggregation::CompositeGroupingAdapter, ::ElasticGraph::GraphQL::Aggregation::NonCompositeGroupingAdapter].each do |adapter|
+          context "when sub-aggregations use the #{adapter.name.split("::").last}" do
+            let(:graphql) { build_graphql(schema_artifacts_directory: "config/schema/artifacts_with_apollo", sub_aggregation_grouping_adapter: adapter) }
+
+            it "groups by a groupable entity ref field within a nested sub-aggregation, alongside its raw backing id" do
+              sponsor1 = build(:sponsor, id: "s1")
+              sponsor2 = build(:sponsor, id: "s2")
+
+              index_records(
+                build(:team, current_players: [build(:player, sponsors: [sponsor1, sponsor2]), build(:player, sponsors: [sponsor1])]),
+                build(:team, current_players: [build(:player, sponsors: [sponsor1])])
+              )
+
+              data = execute_expecting_no_errors(<<~QUERY)
+                query {
+                  team_aggregations {
+                    nodes {
+                      sub_aggregations {
+                        current_players_nested {
+                          nodes {
+                            sub_aggregations {
+                              affiliations {
+                                sponsorships_nested {
+                                  nodes {
+                                    grouped_by {
+                                      sponsor_id
+                                      sponsor { __typename id }
+                                    }
+                                    count_detail { approximate_value }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              QUERY
+
+              sponsorship_nodes = data.dig(
+                "team_aggregations", "nodes", 0, "sub_aggregations", "current_players_nested", "nodes", 0,
+                "sub_aggregations", "affiliations", "sponsorships_nested", "nodes"
+              )
+
+              expect(sponsorship_nodes).to contain_exactly(
+                {"grouped_by" => {"sponsor_id" => "s1", "sponsor" => {"__typename" => "SponsorRef", "id" => "s1"}}, "count_detail" => {"approximate_value" => 3}},
+                {"grouped_by" => {"sponsor_id" => "s2", "sponsor" => {"__typename" => "SponsorRef", "id" => "s2"}}, "count_detail" => {"approximate_value" => 1}}
+              )
+            end
+          end
         end
 
         def query_owners_paginated(**variables)

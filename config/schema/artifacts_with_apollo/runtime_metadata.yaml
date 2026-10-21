@@ -3791,6 +3791,13 @@ object_types_by_name:
       name:
         resolver:
           name: object_with_lookahead
+      owner:
+        name_in_index: owner_id
+        resolver:
+          name: object_with_lookahead
+        wrapped_leaf_grouping:
+          leaf_type: ID
+          wrapper_field: token
       position:
         resolver:
           name: object_with_lookahead
@@ -5589,6 +5596,13 @@ object_types_by_name:
       options:
         resolver:
           name: object_with_lookahead
+      owner:
+        name_in_index: owner_id
+        resolver:
+          name: object_with_lookahead
+        wrapped_leaf_grouping:
+          leaf_type: ID
+          wrapper_field: token
       position:
         resolver:
           name: object_with_lookahead
@@ -6795,11 +6809,23 @@ object_types_by_name:
       name:
         resolver:
           name: get_record_field_value
+  SponsorRef:
+    graphql_fields_by_name:
+      id:
+        resolver:
+          name: get_record_field_value
   Sponsorship:
     graphql_fields_by_name:
       annual_total:
         resolver:
           name: get_record_field_value
+      sponsor:
+        name_in_index: sponsor_id
+        resolver:
+          config:
+            source_id_field: sponsor_id
+            exposed_id_field: id
+          name: apollo_entity_ref
       sponsor_id:
         resolver:
           name: get_record_field_value
@@ -6820,6 +6846,13 @@ object_types_by_name:
       annual_total:
         resolver:
           name: object_with_lookahead
+      sponsor:
+        name_in_index: sponsor_id
+        resolver:
+          name: object_with_lookahead
+        wrapped_leaf_grouping:
+          leaf_type: ID
+          wrapper_field: id
       sponsor_id:
         resolver:
           name: object_with_lookahead

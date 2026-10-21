@@ -22,7 +22,8 @@ module ElasticGraph
             computation_function: nil,
             name_in_index: nil,
             relation: nil,
-            resolver: nil
+            resolver: nil,
+            wrapped_leaf_grouping: nil
           )
         end
 
@@ -31,7 +32,8 @@ module ElasticGraph
             computation_function: :sum,
             name_in_index: nil,
             relation: nil,
-            resolver: configured_graphql_resolver(:self)
+            resolver: configured_graphql_resolver(:self),
+            wrapped_leaf_grouping: nil
           )
 
           expect(field.to_dumpable_hash).to include("computation_function" => "sum")
@@ -43,6 +45,20 @@ module ElasticGraph
 
           expect(field.resolver).to eq nil
           expect(field.to_dumpable_hash).to include("resolver" => nil)
+        end
+
+        it "round-trips `wrapped_leaf_grouping` through the dumped form" do
+          field = graphql_field_with(wrapped_leaf_grouping: WrappedLeafGrouping.new(leaf_type: "ID", wrapper_field: "id"))
+
+          expect(field.to_dumpable_hash).to include("wrapped_leaf_grouping" => {"leaf_type" => "ID", "wrapper_field" => "id"})
+          expect(GraphQLField.from_hash(field.to_dumpable_hash)).to eq field
+        end
+
+        it "is needed in the dumped runtime metadata when it has a `wrapped_leaf_grouping`, even if nothing else is customized" do
+          field = graphql_field_with(name_in_index: "foo", wrapped_leaf_grouping: WrappedLeafGrouping.new(leaf_type: "ID", wrapper_field: "id"))
+
+          expect(field.needed?("foo")).to be true
+          expect(field.with(wrapped_leaf_grouping: nil).needed?("foo")).to be false
         end
       end
     end

@@ -5,7 +5,8 @@ module ElasticGraph
         def apollo_entity_ref_field: (
           ::String,
           ::String,
-          id_field_name_in_index: ::String
+          id_field_name_in_index: ::String,
+          ?groupable: bool
         ) ?{ (::ElasticGraph::SchemaDefinition::SchemaElements::Field) -> void } -> void
 
         def apollo_entity_ref_paginated_collection_field: (

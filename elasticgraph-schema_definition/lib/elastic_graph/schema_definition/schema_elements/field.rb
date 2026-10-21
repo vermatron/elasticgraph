@@ -88,6 +88,10 @@ module ElasticGraph
       #   @private
       # @!attribute [rw] as_input
       #   @private
+      # @!attribute [rw] grouped_by_wrapper_field
+      #   @private
+      # @!attribute [rw] wrapped_leaf_grouping
+      #   @private
       class Field < Struct.new(
         :name, :original_type, :parent_type, :original_type_for_derived_types, :schema_def_state, :accuracy_confidence,
         :filter_customizations, :grouped_by_customizations, :highlights_customizations, :sub_aggregations_customizations,
@@ -95,7 +99,7 @@ module ElasticGraph
         :sortable, :filterable, :aggregatable, :groupable, :highlightable, :returnable,
         :graphql_only, :source, :runtime_field_script, :relationship, :singular_name,
         :computation_function, :as_input,
-        :name_in_index, :resolver
+        :name_in_index, :resolver, :grouped_by_wrapper_field, :wrapped_leaf_grouping
       )
         include Mixins::HasDocumentation
         include Mixins::HasDirectives
@@ -564,6 +568,19 @@ module ElasticGraph
           self.resolver = resolver_name&.then { SchemaArtifacts::RuntimeMetadata::ConfiguredGraphQLResolver.new(it, config) }
         end
 
+        # Makes the `groupedBy` field derived from this GraphQL-only, object-typed field group on the leaf value of its
+        # backing indexing field. The derived field keeps this field's object type, and resolves each bucket's value
+        # wrapped in an object as `{wrapper_field => value}`. Extensions use this to make a field groupable when its
+        # type is an object that wraps a single indexed value--for example, `elasticgraph-apollo` uses it for entity
+        # reference fields, so that each grouping bucket is returned as an entity reference.
+        #
+        # @param wrapper_field [String] name of the field of this field's type in which to wrap the grouping value
+        # @return [void]
+        # @private
+        def group_as_wrapped_leaf(wrapper_field:)
+          self.grouped_by_wrapper_field = wrapper_field
+        end
+
         # Registers an old name that this field used to have in a prior version of the schema. Extensions
         # use this to deal with schema evolution — for example, `elasticgraph-json_ingestion` uses it to
         # ingest events that contain old field names that are no longer in the current schema.
@@ -834,9 +851,23 @@ module ElasticGraph
 
           parent_type.field field_name, grouped_by_field_type_name, name_in_index: name_in_index, graphql_only: true do |f|
             add_grouped_by_field_documentation(f)
+            f.wrapped_leaf_grouping = wrapped_leaf_grouping_for_grouped_by_field
 
             grouped_by_customizations.each { |block| block.call(f) }
           end
+        end
+
+        # @private
+        def wrapped_leaf_grouping_for_grouped_by_field
+          return nil unless (wrapper_field = grouped_by_wrapper_field)
+
+          leaf_type = backing_indexing_field&.type&.fully_unwrapped
+          unless leaf_type&.leaf?
+            raise Errors::SchemaError, "`#{parent_type.name}.#{name}` cannot be grouped as a wrapped leaf: it must be a " \
+              "GraphQL-only field backed by an indexing field with a leaf type, but its backing field type is `#{leaf_type&.name.inspect}`."
+          end
+
+          SchemaArtifacts::RuntimeMetadata::WrappedLeafGrouping.new(leaf_type: leaf_type.name, wrapper_field: wrapper_field)
         end
 
         # @private
@@ -860,7 +891,9 @@ module ElasticGraph
         # @private
         def grouped_by_field_type_name
           unwrapped_type = type_for_derived_types.fully_unwrapped
-          if unwrapped_type.scalar_type_needing_grouped_by_object?
+          if grouped_by_wrapper_field
+            unwrapped_type.name
+          elsif unwrapped_type.scalar_type_needing_grouped_by_object?
             unwrapped_type.with_reverted_override.as_grouped_by.name
           elsif unwrapped_type.leaf?
             unwrapped_type.name
@@ -1114,7 +1147,8 @@ module ElasticGraph
             name_in_index: name_in_index,
             computation_function: computation_function,
             relation: relationship&.runtime_metadata,
-            resolver: resolver
+            resolver: resolver,
+            wrapped_leaf_grouping: wrapped_leaf_grouping
           )
         end
 

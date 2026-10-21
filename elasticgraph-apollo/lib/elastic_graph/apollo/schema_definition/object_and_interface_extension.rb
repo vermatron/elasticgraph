@@ -36,10 +36,13 @@ module ElasticGraph
         # @param name [String] Name of the field
         # @param type [String] Name of the entity reference type (which must be defined separately)
         # @param id_field_name_in_index [String] Name of the backing ID field in the datastore index
+        # @param groupable [Boolean] Whether to expose the field under `groupedBy` in aggregations. When `true`, each grouping
+        #   bucket returns an entity reference built from the bucket's backing ID value, so that the supergraph can resolve the
+        #   referenced entity per bucket. Only supported for singleton references.
         # @return [void]
         # @note This can be used for either a singleton or list reference, based on if `type` is a list.
-        # @note The resulting field will only be available for clients to request as a return field. It will not support filtering,
-        #   sorting, grouping, aggregated values, or highlights.
+        # @note The resulting field will be available for clients to request as a return field and, if `groupable: true`, to group
+        #   by. It will not support filtering, sorting, aggregated values, or highlights.
         # @see #apollo_entity_ref_paginated_collection_field
         #
         # @example Expose `Review.product` and `Review.comments` entity reference fields
@@ -71,18 +74,42 @@ module ElasticGraph
         #       t.index "reviews"
         #     end
         #   end
-        def apollo_entity_ref_field(name, type, id_field_name_in_index:)
+        #
+        # @example Expose a groupable `Review.product` entity reference field
+        #   ElasticGraph.define_schema do |schema|
+        #     schema.object_type "Product" do |t|
+        #       t.field "id", "ID"
+        #       t.apollo_key fields: "id", resolvable: false
+        #     end
+        #
+        #     schema.object_type "Review" do |t|
+        #       t.field "id", "ID"
+        #       t.field "productId", "ID"
+        #
+        #       # Makes `ReviewGroupedBy.product` available, returning a `Product` entity reference for each grouping bucket.
+        #       t.apollo_entity_ref_field "product", "Product", id_field_name_in_index: "productId", groupable: true
+        #
+        #       t.index "reviews"
+        #     end
+        #   end
+        def apollo_entity_ref_field(name, type, id_field_name_in_index:, groupable: false)
           field(
             name,
             type,
             name_in_index: id_field_name_in_index,
-            **LIMITED_GRAPHQL_ONLY_FIELD_OPTIONS
+            **LIMITED_GRAPHQL_ONLY_FIELD_OPTIONS.merge(groupable: groupable)
           ) do |f|
+            if groupable && f.type.list?
+              raise Errors::SchemaError, "`#{f.parent_type.name}.#{f.name}` is invalid: `groupable: true` is not supported for " \
+                "list entity reference fields."
+            end
+
             validate_entity_ref_options(__method__.to_s, f, id_field_name_in_index, type) do |exposed_id_field|
               if f.type.list?
                 f.resolve_with :apollo_entity_ref_list, source_ids_field: id_field_name_in_index, exposed_id_field: exposed_id_field
               else
                 f.resolve_with :apollo_entity_ref, source_id_field: id_field_name_in_index, exposed_id_field: exposed_id_field
+                f.group_as_wrapped_leaf(wrapper_field: exposed_id_field) if groupable
               end
             end
 

@@ -749,6 +749,90 @@ module ElasticGraph
             ))
           end
 
+          it "supports a groupable entity reference field for a single id, grouping on the backing id and returning the entity type" do
+            results = define_schema do |schema|
+              schema.object_type "Component" do |t|
+                t.field "the_id_field", "ID"
+              end
+
+              schema.object_type "Widget" do |t|
+                t.field "id", "ID"
+                t.field "component_id", "ID"
+                t.apollo_entity_ref_field "component", "Component", id_field_name_in_index: "component_id", groupable: true
+
+                t.index "widgets"
+              end
+            end
+
+            schema_string = results.graphql_schema_string
+            expect(type_def_from(schema_string, "WidgetGroupedBy")).to eq(<<~EOS.strip)
+              type WidgetGroupedBy {
+                component_id: ID
+                component: Component
+              }
+            EOS
+
+            # Grouping is the only derived ability that `groupable: true` enables.
+            expect(type_def_from(schema_string, "WidgetFilterInput")).not_to include("component:")
+            expect(type_def_from(schema_string, "WidgetAggregatedValues")).not_to include("component:")
+            expect(type_def_from(schema_string, "WidgetHighlights")).not_to include("component:")
+            expect(type_def_from(schema_string, "WidgetSortOrderInput")).not_to include("component_ASC")
+
+            runtime_metadata = results.runtime_metadata.object_types_by_name
+
+            expect(runtime_metadata.fetch("WidgetGroupedBy").graphql_fields_by_name.fetch("component")).to eq(graphql_field_with(
+              name_in_index: "component_id",
+              resolver: configured_graphql_resolver(:object_with_lookahead),
+              wrapped_leaf_grouping: SchemaArtifacts::RuntimeMetadata::WrappedLeafGrouping.new(leaf_type: "ID", wrapper_field: "the_id_field")
+            ))
+
+            # The return field itself resolves as before, with no grouping metadata.
+            expect(runtime_metadata.fetch("Widget").graphql_fields_by_name.fetch("component")).to eq(graphql_field_with(
+              name_in_index: "component_id",
+              resolver: configured_graphql_resolver(:apollo_entity_ref, source_id_field: "component_id", exposed_id_field: "the_id_field")
+            ))
+          end
+
+          it "groups on the backing id even when it is `indexing_only`, leaving the raw id ungroupable" do
+            results = define_schema do |schema|
+              schema.object_type "Component" do |t|
+                t.field "the_id_field", "ID"
+              end
+
+              schema.object_type "Widget" do |t|
+                t.field "id", "ID"
+                t.field "component_id", "ID", indexing_only: true
+                t.apollo_entity_ref_field "component", "Component", id_field_name_in_index: "component_id", groupable: true
+
+                t.index "widgets"
+              end
+            end
+
+            expect(type_def_from(results.graphql_schema_string, "WidgetGroupedBy")).to eq(<<~EOS.strip)
+              type WidgetGroupedBy {
+                component: Component
+              }
+            EOS
+          end
+
+          it "rejects `groupable: true` on an entity reference field for a list of ids" do
+            expect {
+              define_schema do |schema|
+                schema.object_type "Component" do |t|
+                  t.field "the_id_field", "ID"
+                end
+
+                schema.object_type "Widget" do |t|
+                  t.field "id", "ID"
+                  t.field "component_ids", "[ID!]!"
+                  t.apollo_entity_ref_field "components", "[Component!]!", id_field_name_in_index: "component_ids", groupable: true
+
+                  t.index "widgets"
+                end
+              end.graphql_schema_string
+            }.to raise_error Errors::SchemaError, a_string_including("Widget.components", "`groupable: true` is not supported for list entity reference fields")
+          end
+
           it "supports an entity reference field for a list of ids" do
             results = define_schema do |schema|
               schema.object_type "Component" do |t|

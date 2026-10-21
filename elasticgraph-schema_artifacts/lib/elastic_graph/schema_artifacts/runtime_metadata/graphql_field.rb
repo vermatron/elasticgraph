@@ -8,24 +8,27 @@
 
 require "elastic_graph/schema_artifacts/runtime_metadata/configured_graphql_resolver"
 require "elastic_graph/schema_artifacts/runtime_metadata/relation"
+require "elastic_graph/schema_artifacts/runtime_metadata/wrapped_leaf_grouping"
 
 module ElasticGraph
   module SchemaArtifacts
     module RuntimeMetadata
       # @private
-      class GraphQLField < ::Data.define(:name_in_index, :relation, :computation_function, :resolver)
-        EMPTY = new(nil, nil, nil, nil)
+      class GraphQLField < ::Data.define(:name_in_index, :relation, :computation_function, :resolver, :wrapped_leaf_grouping)
+        EMPTY = new(nil, nil, nil, nil, nil)
         NAME_IN_INDEX = "name_in_index"
         RELATION = "relation"
         COMPUTATION_FUNCTION = "computation_function"
         RESOLVER = "resolver"
+        WRAPPED_LEAF_GROUPING = "wrapped_leaf_grouping"
 
         def self.from_hash(hash)
           new(
             name_in_index: hash[NAME_IN_INDEX],
             relation: hash[RELATION]&.then { |rel_hash| Relation.from_hash(rel_hash) },
             computation_function: hash[COMPUTATION_FUNCTION]&.to_sym,
-            resolver: hash[RESOLVER]&.then { |res_hash| ConfiguredGraphQLResolver.from_hash(res_hash) }
+            resolver: hash[RESOLVER]&.then { |res_hash| ConfiguredGraphQLResolver.from_hash(res_hash) },
+            wrapped_leaf_grouping: hash[WRAPPED_LEAF_GROUPING]&.then { |wlg_hash| WrappedLeafGrouping.from_hash(wlg_hash) }
           )
         end
 
@@ -35,7 +38,8 @@ module ElasticGraph
             COMPUTATION_FUNCTION => computation_function&.to_s,
             NAME_IN_INDEX => name_in_index,
             RELATION => relation&.to_dumpable_hash,
-            RESOLVER => resolver&.to_dumpable_hash
+            RESOLVER => resolver&.to_dumpable_hash,
+            WRAPPED_LEAF_GROUPING => wrapped_leaf_grouping&.to_dumpable_hash
           }
         end
 
@@ -47,6 +51,7 @@ module ElasticGraph
             !!computation_function ||
             name_in_index&.!=(name_in_graphql) ||
             !resolver.nil? ||
+            !wrapped_leaf_grouping.nil? ||
             false
         end
       end

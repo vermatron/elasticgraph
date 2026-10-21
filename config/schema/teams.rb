@@ -163,6 +163,18 @@ ElasticGraph.define_schema do |schema|
   schema.object_type "Sponsorship" do |t|
     t.field "sponsor_id", "ID!"
     t.field "annual_total", "Money!"
+
+    # Exercises grouping by an entity reference within a (doubly) nested sub-aggregation.
+    if t.respond_to?(:apollo_entity_ref_field)
+      # simplecov:disable -- this file is only exercised in a test running without `elasticgraph-apollo`.
+      t.apollo_entity_ref_field "sponsor", "SponsorRef", id_field_name_in_index: "sponsor_id", groupable: true
+
+      schema.object_type "SponsorRef" do |t|
+        t.field "id", "ID"
+        t.apollo_key fields: "id", resolvable: false
+      end
+      # simplecov:enable
+    end
   end
 
   schema.object_type "Affiliations" do |t|

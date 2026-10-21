@@ -217,8 +217,12 @@ module ElasticGraph
           build_clauses_from(grouped_by_node) do |node, field, field_path|
             field_path = from_field_path + field_path
 
+            if (wrapped_leaf_grouping = field.wrapped_leaf_grouping)
+              # The field's type is an object, but it groups on its leaf value, so we don't descend into its subfields.
+              missing_value_placeholder = schema.type_named(wrapped_leaf_grouping.leaf_type).grouping_missing_value_placeholder
+              [FieldTermGrouping.new(field_path: field_path, missing_value_placeholder: missing_value_placeholder)]
             # New date/time grouping API (DateGroupedBy, DateTimeGroupedBy)
-            if field.type.elasticgraph_category == :date_grouped_by_object
+            elsif field.type.elasticgraph_category == :date_grouped_by_object
               date_time_groupings_from(field_path: field_path, node: node)
             elsif !field.type.object?
               # Non-date/time grouping

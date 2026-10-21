@@ -26,6 +26,10 @@ module ElasticGraph
 
         attr_reader :schema, :schema_element_names, :graphql_field, :name_in_index, :relation, :resolver
 
+        # For a `groupedBy` field whose type is an object but which groups on a single leaf value in the index,
+        # describes how to group and how to wrap the bucket value. Nil for all other fields.
+        attr_reader :wrapped_leaf_grouping
+
         def initialize(schema, parent_type, graphql_field, runtime_metadata, resolvers_needing_lookahead)
           @schema = schema
           @schema_element_names = schema.element_names
@@ -36,6 +40,7 @@ module ElasticGraph
             Aggregation::FunctionAdapter::BY_NAME.fetch(function)
           end
           @resolver = runtime_metadata&.resolver
+          @wrapped_leaf_grouping = runtime_metadata&.wrapped_leaf_grouping
           @name_in_index = runtime_metadata&.name_in_index || name
           @graphql_field.extras([:lookahead]) if resolvers_needing_lookahead.include?(@resolver&.name)
         end

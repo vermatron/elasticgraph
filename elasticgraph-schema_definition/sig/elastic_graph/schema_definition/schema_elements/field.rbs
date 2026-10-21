@@ -24,6 +24,8 @@ module ElasticGraph
         attr_reader source: FieldSource?
         attr_accessor relationship: Relationship?
         attr_reader resolver: SchemaArtifacts::RuntimeMetadata::ConfiguredGraphQLResolver?
+        attr_accessor grouped_by_wrapper_field: ::String?
+        attr_accessor wrapped_leaf_grouping: SchemaArtifacts::RuntimeMetadata::WrappedLeafGrouping?
         attr_reader singular_name: ::String?
         attr_reader as_input: bool
         attr_reader args: ::Hash[::String, Argument]
@@ -67,6 +69,7 @@ module ElasticGraph
         def sub_aggregatable?: () -> bool
         def define_aggregated_values_field: (ObjectType) -> void
         def define_grouped_by_field: (ObjectType) -> void
+        def wrapped_leaf_grouping_for_grouped_by_field: () -> SchemaArtifacts::RuntimeMetadata::WrappedLeafGrouping?
         def define_highlights_field: (ObjectType) -> void
         def define_sub_aggregations_field: (parent_type: ObjectType, type: ::String) ?{ (Field) -> void } -> void
         def define_old_aggregation_fields: (ObjectType) -> void
@@ -79,6 +82,7 @@ module ElasticGraph
         def to_sdl: (?type_structure_only: bool, ?default_value_sdl: ::String?) ?{ (argument) -> boolish } -> ::String
         def sourced_from: (::String, ::String) -> void
         def resolve_with: (::Symbol?, **untyped) -> void
+        def group_as_wrapped_leaf: (wrapper_field: ::String) -> void
         def renamed_from: (::String) -> void
         def paths_to_lists_for_count_indexing: (?has_list_ancestor: bool) -> ::Array[::String]
         def index_leaf?: () -> bool

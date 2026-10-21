@@ -30,6 +30,7 @@ module ElasticGraph
 
           private
 
+          def bucket_value_for: (::Array[PathSegment]) -> untyped
           def work_around_terms_aggregation_boolean_value: (untyped) -> untyped
         end
       end

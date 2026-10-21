@@ -1,0 +1,32 @@
+module ElasticGraph
+  module SchemaArtifacts
+    module RuntimeMetadata
+      class WrappedLeafGroupingSupertype
+        attr_reader leaf_type: ::String
+        attr_reader wrapper_field: ::String
+
+        def initialize: (
+          leaf_type: ::String,
+          wrapper_field: ::String
+        ) -> void
+
+        def with: (
+          ?leaf_type: ::String,
+          ?wrapper_field: ::String
+        ) -> instance
+
+        def self.new:
+          (leaf_type: ::String, wrapper_field: ::String) -> instance
+          | (::String, ::String) -> instance
+      end
+
+      class WrappedLeafGrouping < WrappedLeafGroupingSupertype
+        LEAF_TYPE: "leaf_type"
+        WRAPPER_FIELD: "wrapper_field"
+
+        def self.from_hash: (::Hash[::String, untyped]) -> WrappedLeafGrouping
+        def to_dumpable_hash: () -> ::Hash[::String, untyped]
+      end
+    end
+  end
+end

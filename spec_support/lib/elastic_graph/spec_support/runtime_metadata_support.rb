@@ -155,12 +155,13 @@ module ElasticGraph
           Relation.new(foreign_key: foreign_key, direction: direction, additional_filter: additional_filter, foreign_key_nested_paths: foreign_key_nested_paths)
         end
 
-        def graphql_field_with(name_in_index: "name_index", relation: nil, computation_function: nil, resolver: nil)
+        def graphql_field_with(name_in_index: "name_index", relation: nil, computation_function: nil, resolver: nil, wrapped_leaf_grouping: nil)
           GraphQLField.new(
             computation_function: computation_function,
             name_in_index: name_in_index,
             relation: relation,
-            resolver: resolver
+            resolver: resolver,
+            wrapped_leaf_grouping: wrapped_leaf_grouping
           )
         end
 
